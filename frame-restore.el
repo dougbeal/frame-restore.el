@@ -122,4 +122,8 @@ Return the new `initial-frame-alist', or nil if reading failed."
 
 (provide 'frame-restore)
 
+;; Local Variables:
+;; coding: utf-8
+;; End:
+
 ;;; frame-restore.el ends here
