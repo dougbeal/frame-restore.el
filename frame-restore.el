@@ -38,7 +38,7 @@
 (defgroup frame-restore nil
   "Save and restore frame parameters."
   :group 'frames
-  :link '(url-link :tag "Github" "https://github.com/lunaryorn/frame-restore.el")
+  :link '(url-link :tag "Github" "https://github.com/dougbeal/frame-restore.el")
   :link '(emacs-commentary-link :tag "Commentary" "frame-restore")
   :link '(emacs-library-link :tag "Source" "frame-restore"))
 
@@ -64,15 +64,28 @@ If t, restore the frame, otherwise don't."
   :type 'boolean
   :group 'frame-restore)
 
-(defun frame-restore--write-parameters (params)
+(defcustom frame-restore-subsequent-frames t
+  "Whether to restore the parameters of subsequent frames.
+
+If t, restore the frame, otherwise don't."
+  :type 'boolean
+  :group 'frame-restore)
+
+(defun frame-restore--filter-parameters (params)
+  (--filter (memq (car it) frame-restore-parameters) params)
+  )
+
+(defun frame-restore--write-parameters (frame-params)
   "Write PARAMS to `frame-restore-parameters-file'."
   (with-temp-file frame-restore-parameters-file
-    (prin1 (--filter (memq (car it) frame-restore-parameters) params)
+    (prin1 (-mapcat (lambda (params)
+                      (list (frame-restore--filter-parameters params)))
+                    frame-params)
            (current-buffer))
-    (terpri (current-buffer))))
+           (terpri (current-buffer))))
 
 (defun frame-restore-save-parameters ()
-  "Save frame parameters of the currently selected frame.
+  "Save frame parameters of all frames.
 
 Save parameters in `frame-restore-parameters' to
 `frame-restore-parameters-file'.
@@ -80,7 +93,8 @@ Save parameters in `frame-restore-parameters' to
 Return t, if the parameters were saved, or nil otherwise."
   (condition-case nil
       (when (display-graphic-p) ; GUI frames only!
-        (frame-restore--write-parameters (frame-parameters))
+        (frame-restore--write-parameters 
+         (-map-when 'display-graphic-p 'frame-parameters (frame-list)))
         t)
     (file-error nil)))
 
@@ -96,7 +110,13 @@ Remove duplicate keys."
     (insert-file-contents frame-restore-parameters-file)
     (goto-char (point-min))
     (-when-let (params (read (current-buffer)))
-      (--filter (memq (car it) frame-restore-parameters) params))))
+      (-map  (lambda (frame-params)
+               (--filter (memq (car it) frame-restore-parameters) frame-params))
+             params)    
+      )
+
+    ))
+      
 
 (defun frame-restore-initial-frame ()
   "Restore the frame parameters of the initial frame.
@@ -108,9 +128,25 @@ accordingly.
 Return the new `initial-frame-alist', or nil if reading failed."
   (condition-case nil
       (-when-let* ((params (frame-restore--read-parameters)))
-        (setq initial-frame-alist
-              (frame-restore--add-alists params initial-frame-alist)))
+        (setq 
+         initial-frame-alist         (frame-restore--add-alists (car params) initial-frame-alist)
+         frame-restore-frame-parameters params)       
+        )
     (error nil)))
+
+(defun frame-restore-subsequent-frames (frame)
+  "Restore the frame parameters of subsequent frames.
+
+`frame-restore-initial-frame' must be called first
+
+"
+  (remove-hook 'after-make-frame-functions #'frame-restore-subsequent-frames)
+  (--each (-remove (lambda (x) 
+                     (equal x (frame-restore--filter-parameters (frame-parameters frame ))))
+                   frame-restore-frame-parameters) 
+    (make-frame it))
+
+  nil)
 
 ;;;###autoload
 (defun frame-restore ()
@@ -118,7 +154,10 @@ Return the new `initial-frame-alist', or nil if reading failed."
   (unless noninteractive                ; Skip noninteractive sessions
     (add-hook 'kill-emacs-hook #'frame-restore-save-parameters)
     (when frame-restore-initial-frame
-      (add-hook 'after-init-hook #'frame-restore-initial-frame))))
+      (add-hook 'after-init-hook #'frame-restore-initial-frame))
+    (when frame-restore-subsequent-frames
+      (add-hook 'after-make-frame-functions #'frame-restore-subsequent-frames))
+))
 
 (provide 'frame-restore)
 
