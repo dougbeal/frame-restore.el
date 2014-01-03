@@ -159,8 +159,7 @@ Return the new `initial-frame-alist', or nil if reading failed."
         (when (fboundp 'frame-restore-save-parameters)
           (add-hook 'kill-emacs-hook 'frame-restore-save-parameters))
         (when (fboundp 'frame-restore-initial-frame)
-          (add-hook 'after-init-hook 'frame-restore-initial-frame))
-        (when (fboundp 'edebug-trace) (edebug-trace "frame-restore: hooks installed")))
+          (add-hook 'after-init-hook 'frame-restore-initial-frame)))
     (message "frame-restore: noninteractive or doesn't support frames")))
 
 
