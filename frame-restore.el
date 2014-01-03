@@ -76,7 +76,8 @@ If t, restore the frame, otherwise don't."
   )
 
 (defun frame-restore--write-parameters (frame-params)
-  "Write PARAMS to `frame-restore-parameters-file'."
+  "Write PARAMS to `frame-restore-parameters-file'.
+Argument FRAME-PARAMS "
   (with-temp-file frame-restore-parameters-file
     (prin1 (-mapcat (lambda (params)
                       (list (frame-restore--filter-parameters params)))
@@ -91,12 +92,17 @@ Save parameters in `frame-restore-parameters' to
 `frame-restore-parameters-file'.
 
 Return t, if the parameters were saved, or nil otherwise."
-  (condition-case nil
+  (condition-case err
       (when (display-graphic-p) ; GUI frames only!
         (frame-restore--write-parameters 
          (-map-when 'display-graphic-p 'frame-parameters (frame-list)))
         t)
-    (file-error nil)))
+    (file-error 
+     (setq message-log-max t)
+     (message 
+      "error: %s" (error-message-string err)))))
+
+
 
 (defun frame-restore--add-alists (a b)
   "Add alist A to B and return the result.
@@ -126,40 +132,38 @@ Load parameters in `frame-restore-parameters' from
 accordingly.
 
 Return the new `initial-frame-alist', or nil if reading failed."
-  (condition-case err
+  (with-demoted-errors
       (-when-let* ((params (frame-restore--read-parameters)))
         (setq 
          initial-frame-alist         (frame-restore--add-alists (car params) initial-frame-alist)
-         frame-restore-frame-parameters params)       
-        )
-    (setq message-log-max t)
-    (message "error: %s" (error-message-string err))))
+         frame-restore-subsequent-frame-parameters (cdr params))
+        (message "frame-restore: %s" initial-frame-alist))
+      (frame-restore-subsequent-frames)))
 
 
-(defun frame-restore-subsequent-frames (frame)
+(defun frame-restore-subsequent-frames ()
   "Restore the frame parameters of subsequent frames.
 
 `frame-restore-initial-frame' must be called first
 
 "
-  (remove-hook 'after-make-frame-functions #'frame-restore-subsequent-frames)
-  (--each (-remove (lambda (x) 
-                     (equal x (frame-restore--filter-parameters (frame-parameters frame ))))
-                   frame-restore-frame-parameters) 
-    (make-frame it))
-
-  nil)
+  (--each frame-restore-subsequent-frame-parameters
+    (make-frame it)
+    (message "frame-restore: %s" it)))
 
 ;;;###autoload
 (defun frame-restore ()
-  "Save and restore parameters of the Emacs frame."
-  (unless noninteractive                ; Skip noninteractive sessions
-    (add-hook 'kill-emacs-hook #'frame-restore-save-parameters)
-    (when frame-restore-initial-frame
-      (add-hook 'after-init-hook #'frame-restore-initial-frame))
-    (when frame-restore-subsequent-frames
-      (add-hook 'after-make-frame-functions #'frame-restore-subsequent-frames))
-))
+  "Install hooks to save and restore selected parameters every Emacs frame."
+  (if (and (display-graphic-p) (not noninteractive)) 
+      (progn
+        (when (fboundp 'frame-restore-save-parameters)
+          (add-hook 'kill-emacs-hook 'frame-restore-save-parameters))
+        (when (fboundp 'frame-restore-initial-frame)
+          (add-hook 'after-init-hook 'frame-restore-initial-frame))
+        (when (fboundp 'edebug-trace) (edebug-trace "frame-restore: hooks installed")))
+    (message "frame-restore: noninteractive or doesn't support frames")))
+
+
 
 (provide 'frame-restore)
 
