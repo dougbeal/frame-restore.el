@@ -126,13 +126,15 @@ Load parameters in `frame-restore-parameters' from
 accordingly.
 
 Return the new `initial-frame-alist', or nil if reading failed."
-  (condition-case nil
+  (condition-case err
       (-when-let* ((params (frame-restore--read-parameters)))
         (setq 
          initial-frame-alist         (frame-restore--add-alists (car params) initial-frame-alist)
          frame-restore-frame-parameters params)       
         )
-    (error nil)))
+    (setq message-log-max t)
+    (message "error: %s" (error-message-string err))))
+
 
 (defun frame-restore-subsequent-frames (frame)
   "Restore the frame parameters of subsequent frames.
