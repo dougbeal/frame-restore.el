@@ -25,7 +25,7 @@
 
 ;;; Commentary:
 
-;; Save and restore parameters of Emacs frames.
+;; Save and restore selected parameters of Emacs frames.
 
 ;; Just call `frame-restore' in your `init.el':
 ;;
@@ -57,27 +57,27 @@ frame parameters."
   :type '(repeat (symbol :tag "Frame parameter"))
   :group 'frame-restore)
 
-(defcustom frame-restore-initial-frame t
-  "Whether to restore the parameters of the initial frame.
+(defcustom frame-restore-save-parameters t
+  "Whether to save parameters when Emacs exits.
 
-If t, restore the frame, otherwise don't."
+If t, save selected `frame-restore-parameters' from all frames."
   :type 'boolean
   :group 'frame-restore)
 
-(defcustom frame-restore-subsequent-frames t
-  "Whether to restore the parameters of subsequent frames.
+(defcustom frame-restore-frames t
+  "Whether to restore the parameters of the saved frames.
 
-If t, restore the frame, otherwise don't."
+If t, restore frames and saved parameters from `frame-restore-parameters-file'."
   :type 'boolean
   :group 'frame-restore)
 
 (defun frame-restore--filter-parameters (params)
+  "Filter out frame PARAMS not in the `frame-restore-parameters'."
   (--filter (memq (car it) frame-restore-parameters) params)
   )
 
 (defun frame-restore--write-parameters (frame-params)
-  "Write PARAMS to `frame-restore-parameters-file'.
-Argument FRAME-PARAMS "
+  "Write FRAME-PARAMS to `frame-restore-parameters-file'."
   (with-temp-file frame-restore-parameters-file
     (prin1 (-mapcat (lambda (params)
                       (list (frame-restore--filter-parameters params)))
@@ -86,9 +86,7 @@ Argument FRAME-PARAMS "
            (terpri (current-buffer))))
 
 (defun frame-restore-save-parameters ()
-  "Save frame parameters of all frames.
-
-Save parameters in `frame-restore-parameters' to
+  "Save parameters in `frame-restore-parameters' of each frame to
 `frame-restore-parameters-file'.
 
 Return t, if the parameters were saved, or nil otherwise."
@@ -144,9 +142,7 @@ Return the new `initial-frame-alist', or nil if reading failed."
 (defun frame-restore-subsequent-frames ()
   "Restore the frame parameters of subsequent frames.
 
-`frame-restore-initial-frame' must be called first
-
-"
+`frame-restore-initial-frame' must be called first."
   (--each frame-restore-subsequent-frame-parameters
     (make-frame it)
     (message "frame-restore: %s" it)))
@@ -156,9 +152,9 @@ Return the new `initial-frame-alist', or nil if reading failed."
   "Install hooks to save and restore selected parameters every Emacs frame."
   (if (and (display-graphic-p) (not noninteractive)) 
       (progn
-        (when (fboundp 'frame-restore-save-parameters)
+        (when frame-restore-save-parameters
           (add-hook 'kill-emacs-hook 'frame-restore-save-parameters))
-        (when (fboundp 'frame-restore-initial-frame)
+        (when frame-restore-frames
           (add-hook 'after-init-hook 'frame-restore-initial-frame)))
     (message "frame-restore: noninteractive or doesn't support frames")))
 
